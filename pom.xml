@@ -16,5 +16,6 @@
         <module>springboot-ldaptive</module>
         <module>springboot-tabula</module>
         <module>springboot-poi-tl</module>
+        <module>springboot-rabbitmq</module>
     </modules>
 </project>
