@@ -17,5 +17,7 @@
         <module>springboot-tabula</module>
         <module>springboot-poi-tl</module>
         <module>springboot-rabbitmq</module>
+        <module>springboot-security</module>
+        <module>springboot-security-oauth</module>
     </modules>
 </project>
