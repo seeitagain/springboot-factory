@@ -1,0 +1,2094 @@
+// 全局变量
+let scene, camera, renderer, controls;
+let clock = new THREE.Clock();
+
+// 动态组件
+let pipes = [];
+let tanks = [];
+let particles = [];
+let smokestacks = [];
+let lights = [];
+let fans = [];
+let controlRooms = [];
+
+// 颜色
+const COLORS = {
+    building: 0x888899,
+    tanks: 0x3377aa,
+    pipes: 0x666666,
+    ground: 0x333333,
+    liquid: 0x00dd77,
+    smoke: 0xaaaaaa,
+    light: 0xffaa22,
+    warning: 0xff3311,
+    control: 0x225599,
+    equipment: 0x44aa99,
+    steel: 0x889999,
+    coolingTower: 0x6677aa,
+    walkway: 0x555566
+};
+
+// 初始化场景
+function init() {
+    // 创建场景
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050510);
+    scene.fog = new THREE.Fog(0x050510, 10, 100);
+
+    // 创建相机
+    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(25, 15, 25);
+    camera.lookAt(0, 0, 0);
+
+    // 创建渲染器
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.getElementById('container').appendChild(renderer.domElement);
+
+    // 添加控制器
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.screenSpacePanning = false;
+    controls.minDistance = 5;
+    controls.maxDistance = 60;
+    controls.maxPolarAngle = Math.PI / 2;
+
+    // 添加灯光
+    addLights();
+
+    // 创建地面
+    createGround();
+
+    // 创建工厂主建筑
+    createMainBuilding();
+
+    // 创建储罐和管道
+    createTanks();
+    createPipes();
+
+    // 创建烟囱
+    createSmokestacks();
+    
+    // 创建冷却塔
+    createCoolingTowers();
+    
+    // 创建控制室
+    createControlRoom();
+    
+    // 创建热交换器
+    createHeatExchangers();
+    
+    // 创建厂区边界和围墙
+    createPerimeterFence();
+    
+    // 创建辅助设备
+    createAuxiliaryEquipment();
+    
+    // 创建行人走道和护栏
+    createWalkways();
+
+    // 窗口大小调整
+    window.addEventListener('resize', onWindowResize);
+
+    // 开始动画
+    animate();
+}
+
+// 添加灯光
+function addLights() {
+    // 环境光
+    const ambientLight = new THREE.AmbientLight(0x333333);
+    scene.add(ambientLight);
+
+    // 主方向光
+    const mainLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    mainLight.position.set(10, 20, 10);
+    mainLight.castShadow = true;
+    mainLight.shadow.mapSize.width = 2048;
+    mainLight.shadow.mapSize.height = 2048;
+    mainLight.shadow.camera.left = -15;
+    mainLight.shadow.camera.right = 15;
+    mainLight.shadow.camera.top = 15;
+    mainLight.shadow.camera.bottom = -15;
+    mainLight.shadow.camera.near = 0.5;
+    mainLight.shadow.camera.far = 50;
+    scene.add(mainLight);
+
+    // 添加点光源
+    for (let i = 0; i < 5; i++) {
+        const pointLight = new THREE.PointLight(COLORS.light, 1, 10);
+        const x = Math.random() * 16 - 8;
+        const y = 2 + Math.random() * 3;
+        const z = Math.random() * 16 - 8;
+        pointLight.position.set(x, y, z);
+        pointLight.castShadow = true;
+        scene.add(pointLight);
+        
+        // 添加闪烁效果
+        lights.push({
+            light: pointLight,
+            intensity: 1,
+            minIntensity: 0.7,
+            maxIntensity: 1.3,
+            speed: 0.05 + Math.random() * 0.1,
+            phase: Math.random() * Math.PI * 2
+        });
+    }
+    
+    // 添加警示灯
+    for (let i = 0; i < 3; i++) {
+        const warningLight = new THREE.PointLight(COLORS.warning, 1, 5);
+        const positions = [
+            new THREE.Vector3(-8, 6, -5),
+            new THREE.Vector3(7, 6, 4),
+            new THREE.Vector3(0, 10, -7)
+        ];
+        warningLight.position.copy(positions[i]);
+        warningLight.castShadow = false;
+        scene.add(warningLight);
+        
+        // 添加灯光外壳
+        const bulbGeometry = new THREE.SphereGeometry(0.3, 8, 8);
+        const bulbMaterial = new THREE.MeshStandardMaterial({
+            color: COLORS.warning,
+            emissive: COLORS.warning,
+            emissiveIntensity: 0.8,
+            transparent: true,
+            opacity: 0.9
+        });
+        const bulb = new THREE.Mesh(bulbGeometry, bulbMaterial);
+        bulb.position.copy(positions[i]);
+        scene.add(bulb);
+        
+        // 添加闪烁效果（警示灯闪烁更快）
+        lights.push({
+            light: warningLight,
+            bulb: bulb,
+            intensity: 1,
+            minIntensity: 0.1,
+            maxIntensity: 1.5,
+            speed: 0.3 + Math.random() * 0.2,
+            phase: Math.random() * Math.PI * 2,
+            isWarning: true
+        });
+    }
+}
+
+// 创建地面
+function createGround() {
+    // 主地面
+    const groundGeo = new THREE.PlaneGeometry(60, 60);
+    const groundMat = new THREE.MeshStandardMaterial({
+        color: COLORS.ground,
+        roughness: 0.8,
+        metalness: 0.2
+    });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.5;
+    ground.receiveShadow = true;
+    scene.add(ground);
+    
+    // 地面网格
+    const gridHelper = new THREE.GridHelper(60, 30, 0x555555, 0x222222);
+    gridHelper.position.y = -0.49;
+    scene.add(gridHelper);
+    
+    // 添加混凝土地基
+    const concreteGeo = new THREE.BoxGeometry(30, 0.3, 20);
+    const concreteMat = new THREE.MeshStandardMaterial({
+        color: 0x999999,
+        roughness: 0.9,
+        metalness: 0.1
+    });
+    const concrete = new THREE.Mesh(concreteGeo, concreteMat);
+    concrete.position.y = -0.3;
+    concrete.receiveShadow = true;
+    scene.add(concrete);
+}
+
+// 创建工厂主建筑
+function createMainBuilding() {
+    // 主厂房
+    const mainGeo = new THREE.BoxGeometry(12, 4, 8);
+    const mainMat = new THREE.MeshStandardMaterial({
+        color: COLORS.building,
+        roughness: 0.7,
+        metalness: 0.3
+    });
+    const mainBuilding = new THREE.Mesh(mainGeo, mainMat);
+    mainBuilding.position.y = 1.5;
+    mainBuilding.castShadow = true;
+    mainBuilding.receiveShadow = true;
+    scene.add(mainBuilding);
+
+    // 侧厂房
+    const sideGeo = new THREE.BoxGeometry(4, 3, 5);
+    const sideBuilding = new THREE.Mesh(sideGeo, mainMat);
+    sideBuilding.position.set(-6, 1, 0);
+    sideBuilding.castShadow = true;
+    sideBuilding.receiveShadow = true;
+    scene.add(sideBuilding);
+    
+    // 添加窗户
+    addWindows(mainBuilding, 3, 4);
+    addWindows(sideBuilding, 2, 2);
+    
+    // 添加屋顶
+    const roofGeo = new THREE.BoxGeometry(12.5, 0.5, 8.5);
+    const roofMat = new THREE.MeshStandardMaterial({
+        color: 0x666677,
+        roughness: 0.6,
+        metalness: 0.4
+    });
+    const roof = new THREE.Mesh(roofGeo, roofMat);
+    roof.position.set(0, 3.75, 0);
+    roof.castShadow = true;
+    roof.receiveShadow = true;
+    scene.add(roof);
+    
+    // 添加侧面屋顶
+    const sideRoofGeo = new THREE.BoxGeometry(4.5, 0.5, 5.5);
+    const sideRoof = new THREE.Mesh(sideRoofGeo, roofMat);
+    sideRoof.position.set(-6, 3, 0);
+    sideRoof.castShadow = true;
+    sideRoof.receiveShadow = true;
+    scene.add(sideRoof);
+    
+    // 添加前门
+    const doorGeo = new THREE.BoxGeometry(2, 2.5, 0.2);
+    const doorMat = new THREE.MeshStandardMaterial({
+        color: 0x333344,
+        roughness: 0.5,
+        metalness: 0.5
+    });
+    const door = new THREE.Mesh(doorGeo, doorMat);
+    door.position.set(0, 0.75, 4.1);
+    door.castShadow = true;
+    door.receiveShadow = true;
+    scene.add(door);
+    
+    // 添加钢结构支柱
+    createSteelSupports();
+}
+
+// 添加窗户到建筑物
+function addWindows(building, rows, cols) {
+    const windowGeo = new THREE.PlaneGeometry(0.6, 0.6);
+    const windowMat = new THREE.MeshStandardMaterial({
+        color: 0xaaccff,
+        roughness: 0.3,
+        metalness: 0.8,
+        emissive: 0x446688,
+        emissiveIntensity: 0.2
+    });
+    
+    const buildingSize = new THREE.Box3().setFromObject(building).getSize(new THREE.Vector3());
+    const startX = -buildingSize.x / 2 + 1;
+    const startY = 0;
+    const startZ = -buildingSize.z / 2 + 1;
+    const stepX = (buildingSize.x - 2) / Math.max(1, cols - 1);
+    const stepZ = (buildingSize.z - 2) / Math.max(1, rows - 1);
+    
+    // 前面窗户
+    for (let i = 0; i < rows; i++) {
+        for (let j = 0; j < cols; j++) {
+            if (i === rows - 1 && j === Math.floor(cols / 2)) continue; // 跳过门的位置
+            
+            const window1 = new THREE.Mesh(windowGeo, windowMat);
+            window1.position.set(
+                building.position.x + startX + j * stepX,
+                building.position.y + startY + 1.5,
+                building.position.z + buildingSize.z / 2 + 0.01
+            );
+            window1.castShadow = false;
+            window1.receiveShadow = false;
+            scene.add(window1);
+        }
+    }
+    
+    // 后面窗户
+    for (let i = 0; i < rows; i++) {
+        for (let j = 0; j < cols; j++) {
+            const window2 = new THREE.Mesh(windowGeo, windowMat);
+            window2.position.set(
+                building.position.x + startX + j * stepX,
+                building.position.y + startY + 1.5,
+                building.position.z - buildingSize.z / 2 - 0.01
+            );
+            window2.rotation.y = Math.PI;
+            window2.castShadow = false;
+            window2.receiveShadow = false;
+            scene.add(window2);
+        }
+    }
+    
+    // 侧面窗户
+    for (let i = 0; i < Math.min(rows, 2); i++) {
+        const window3 = new THREE.Mesh(windowGeo, windowMat);
+        window3.position.set(
+            building.position.x + buildingSize.x / 2 + 0.01,
+            building.position.y + startY + 1.5,
+            building.position.z + startZ + i * stepZ
+        );
+        window3.rotation.y = -Math.PI / 2;
+        window3.castShadow = false;
+        window3.receiveShadow = false;
+        scene.add(window3);
+        
+        const window4 = new THREE.Mesh(windowGeo, windowMat);
+        window4.position.set(
+            building.position.x - buildingSize.x / 2 - 0.01,
+            building.position.y + startY + 1.5,
+            building.position.z + startZ + i * stepZ
+        );
+        window4.rotation.y = Math.PI / 2;
+        window4.castShadow = false;
+        window4.receiveShadow = false;
+        scene.add(window4);
+    }
+}
+
+// 创建钢结构支柱
+function createSteelSupports() {
+    const pillarGeo = new THREE.BoxGeometry(0.4, 4, 0.4);
+    const pillarMat = new THREE.MeshStandardMaterial({
+        color: COLORS.steel,
+        roughness: 0.4,
+        metalness: 0.7
+    });
+    
+    // 工厂四周的支柱
+    const pillarPositions = [
+        new THREE.Vector3(6, 1.5, 4),
+        new THREE.Vector3(6, 1.5, -4),
+        new THREE.Vector3(-6, 1.5, 4),
+        new THREE.Vector3(-6, 1.5, -4),
+        new THREE.Vector3(-8, 1, 2.5),
+        new THREE.Vector3(-8, 1, -2.5)
+    ];
+    
+    pillarPositions.forEach(pos => {
+        const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+        pillar.position.copy(pos);
+        pillar.castShadow = true;
+        pillar.receiveShadow = true;
+        scene.add(pillar);
+    });
+    
+    // 添加横梁
+    const beamGeo = new THREE.BoxGeometry(12, 0.4, 0.4);
+    const beam1 = new THREE.Mesh(beamGeo, pillarMat);
+    beam1.position.set(0, 3.6, 4);
+    beam1.castShadow = true;
+    beam1.receiveShadow = true;
+    scene.add(beam1);
+    
+    const beam2 = new THREE.Mesh(beamGeo, pillarMat);
+    beam2.position.set(0, 3.6, -4);
+    beam2.castShadow = true;
+    beam2.receiveShadow = true;
+    scene.add(beam2);
+}
+
+// 创建储罐
+function createTanks() {
+    // 创建几个主储罐
+    for (let i = 0; i < 4; i++) {
+        const radius = 1 + Math.random() * 0.5;
+        const height = 3 + Math.random() * 2;
+        
+        // 储罐外壳
+        const tankGeo = new THREE.CylinderGeometry(radius, radius, height, 16);
+        const tankMat = new THREE.MeshStandardMaterial({
+            color: COLORS.tanks,
+            roughness: 0.5,
+            metalness: 0.7
+        });
+        const tank = new THREE.Mesh(tankGeo, tankMat);
+        
+        // 定位到工厂旁边
+        tank.position.set(
+            i * 3 - 4.5,
+            height / 2 - 0.5,
+            7
+        );
+        tank.castShadow = true;
+        tank.receiveShadow = true;
+        scene.add(tank);
+        
+        // 储罐顶部
+        const topGeo = new THREE.CylinderGeometry(radius * 1.1, radius, 0.5, 16);
+        const topMat = new THREE.MeshStandardMaterial({
+            color: COLORS.tanks,
+            roughness: 0.5,
+            metalness: 0.8
+        });
+        const top = new THREE.Mesh(topGeo, topMat);
+        top.position.y = height / 2 + 0.25;
+        tank.add(top);
+        
+        // 储罐内液体（可见部分）
+        const liquidGeo = new THREE.CylinderGeometry(radius * 0.9, radius * 0.9, height * 0.8, 16);
+        const liquidMat = new THREE.MeshStandardMaterial({
+            color: COLORS.liquid,
+            transparent: true,
+            opacity: 0.8,
+            roughness: 0.2,
+            metalness: 0.1
+        });
+        const liquid = new THREE.Mesh(liquidGeo, liquidMat);
+        liquid.position.y = -height * 0.1;
+        tank.add(liquid);
+        
+        // 添加压力表和阀门 - 获取gauge对象
+        const gauge = addTankGaugesAndValves(tank, radius);
+        
+        // 保存储罐和液体引用用于动画
+        tanks.push({
+            tank: tank,
+            liquid: liquid,
+            maxHeight: height * 0.8,
+            minHeight: height * 0.2,
+            currentHeight: height * 0.8,
+            liquid: liquid,
+            direction: Math.random() > 0.5 ? 1 : -1,
+            speed: 0.05 + Math.random() * 0.1,
+            gauge: gauge  // 将gauge作为对象属性添加
+        });
+    }
+    
+    // 创建二次储罐（水平放置）
+    for (let i = 0; i < 2; i++) {
+        const radius = 0.8 + Math.random() * 0.3;
+        const length = 3 + Math.random() * 1;
+        
+        // 水平储罐
+        const horizTankGeo = new THREE.CylinderGeometry(radius, radius, length, 16, 1, false);
+        const horizTankMat = new THREE.MeshStandardMaterial({
+            color: 0x447788,
+            roughness: 0.6,
+            metalness: 0.6
+        });
+        const horizTank = new THREE.Mesh(horizTankGeo, horizTankMat);
+        horizTank.rotation.z = Math.PI / 2;
+        horizTank.position.set(
+            -8, 
+            radius + 0.5,
+            i * 5 - 5
+        );
+        horizTank.castShadow = true;
+        horizTank.receiveShadow = true;
+        scene.add(horizTank);
+        
+        // 储罐两端
+        const endGeo = new THREE.SphereGeometry(radius, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+        const endMat = new THREE.MeshStandardMaterial({
+            color: 0x447788,
+            roughness: 0.5,
+            metalness: 0.7
+        });
+        
+        const end1 = new THREE.Mesh(endGeo, endMat);
+        end1.rotation.y = Math.PI;
+        end1.position.set(length / 2, 0, 0);
+        horizTank.add(end1);
+        
+        const end2 = new THREE.Mesh(endGeo, endMat);
+        end2.rotation.y = 0;
+        end2.position.set(-length / 2, 0, 0);
+        horizTank.add(end2);
+        
+        // 添加支撑
+        const supportGeo = new THREE.BoxGeometry(length, 0.5, radius * 1.2);
+        const supportMat = new THREE.MeshStandardMaterial({
+            color: COLORS.steel,
+            roughness: 0.7,
+            metalness: 0.4
+        });
+        const support = new THREE.Mesh(supportGeo, supportMat);
+        support.position.set(horizTank.position.x, horizTank.position.y - radius - 0.25, horizTank.position.z);
+        support.castShadow = true;
+        support.receiveShadow = true;
+        scene.add(support);
+    }
+}
+
+// 给储罐添加压力表和阀门
+function addTankGaugesAndValves(tank, radius) {
+    // 阀门
+    const valveGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.4, 8);
+    const valveMat = new THREE.MeshStandardMaterial({
+        color: 0x994422,
+        roughness: 0.4,
+        metalness: 0.6
+    });
+    const valve = new THREE.Mesh(valveGeo, valveMat);
+    valve.rotation.x = Math.PI / 2;
+    valve.position.set(0, -1, radius + 0.2);
+    tank.add(valve);
+    
+    // 阀门手轮
+    const wheelGeo = new THREE.TorusGeometry(0.3, 0.05, 8, 16);
+    const wheelMat = new THREE.MeshStandardMaterial({
+        color: 0xaa3311,
+        roughness: 0.4,
+        metalness: 0.6
+    });
+    const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+    wheel.position.set(0, 0, 0.3);
+    valve.add(wheel);
+    
+    // 压力表
+    const gaugeBaseGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.1, 8);
+    const gaugeBaseMat = new THREE.MeshStandardMaterial({
+        color: 0x333333,
+        roughness: 0.4,
+        metalness: 0.8
+    });
+    const gaugeBase = new THREE.Mesh(gaugeBaseGeo, gaugeBaseMat);
+    gaugeBase.rotation.x = Math.PI / 2;
+    gaugeBase.position.set(0, 1, radius + 0.05);
+    tank.add(gaugeBase);
+    
+    const gaugeFaceGeo = new THREE.CircleGeometry(0.25, 16);
+    const gaugeFaceMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.2,
+        metalness: 0.5
+    });
+    const gaugeFace = new THREE.Mesh(gaugeFaceGeo, gaugeFaceMat);
+    gaugeFace.position.set(0, 0, 0.06);
+    gaugeBase.add(gaugeFace);
+    
+    // 压力表指针
+    const needleGeo = new THREE.BoxGeometry(0.01, 0.2, 0.01);
+    const needleMat = new THREE.MeshBasicMaterial({
+        color: 0xff0000
+    });
+    const needle = new THREE.Mesh(needleGeo, needleMat);
+    needle.position.set(0, 0.05, 0.07);
+    gaugeBase.add(needle);
+    
+    // 保存指针引用用于动画
+    const angle = Math.random() * Math.PI - Math.PI / 2;
+    needle.rotation.z = angle;
+    
+    // 返回gauge对象给调用方，而不是直接修改tanks数组
+    return {
+        needle: needle,
+        minAngle: -Math.PI / 2,
+        maxAngle: Math.PI / 2,
+        currentAngle: angle,
+        direction: Math.random() > 0.5 ? 1 : -1,
+        speed: 0.02 + Math.random() * 0.05
+    };
+}
+
+// 创建管道
+function createPipes() {
+    // 主管道网络：连接储罐的复杂管道系统
+    createMainPipeNetwork();
+    
+    // 垂直管道系统
+    createVerticalPipes();
+    
+    // 复杂弯曲管道
+    createCurvedPipes();
+    
+    // 建筑物周围的管道
+    createBuildingPipes();
+}
+
+// 创建主管道网络
+function createMainPipeNetwork() {
+    // 连接储罐的管道
+    for (let i = 0; i < tanks.length - 1; i++) {
+        const startPos = tanks[i].tank.position.clone();
+        const endPos = tanks[i + 1].tank.position.clone();
+        
+        // 管道起点和终点
+        const start = new THREE.Vector3(startPos.x, 0, startPos.z);
+        const end = new THREE.Vector3(endPos.x, 0, endPos.z);
+        
+        // 管道路径
+        const curve = new THREE.CatmullRomCurve3([
+            start,
+            new THREE.Vector3(start.x, 0.5, start.z),
+            new THREE.Vector3((start.x + end.x) / 2, 1, (start.z + end.z) / 2),
+            new THREE.Vector3(end.x, 0.5, end.z),
+            end
+        ]);
+        
+        // 创建管道几何体
+        const tubeGeo = new THREE.TubeGeometry(curve, 20, 0.2, 8, false);
+        const tubeMat = new THREE.MeshStandardMaterial({
+            color: COLORS.pipes,
+            roughness: 0.3,
+            metalness: 0.8
+        });
+        const tube = new THREE.Mesh(tubeGeo, tubeMat);
+        tube.castShadow = true;
+        tube.receiveShadow = true;
+        scene.add(tube);
+        
+        // 创建流动的粒子效果
+        const particlesGeo = new THREE.SphereGeometry(0.15, 8, 8);
+        const particlesMat = new THREE.MeshStandardMaterial({
+            color: COLORS.liquid,
+            transparent: true,
+            opacity: 0.8,
+            emissive: COLORS.liquid,
+            emissiveIntensity: 0.2
+        });
+        
+        // 在管道上创建几个粒子
+        for (let j = 0; j < 5; j++) {
+            const particle = new THREE.Mesh(particlesGeo, particlesMat);
+            scene.add(particle);
+            
+            particles.push({
+                mesh: particle,
+                curve: curve,
+                speed: 0.001 + Math.random() * 0.003,
+                offset: j * 0.2,
+                progress: j * 0.2
+            });
+        }
+        
+        // 保存管道引用
+        pipes.push(tube);
+    }
+    
+    // 主厂房到储罐的管道
+    const mainPipeGeo = new THREE.CylinderGeometry(0.3, 0.3, 8, 8);
+    const mainPipeMat = new THREE.MeshStandardMaterial({
+        color: COLORS.pipes,
+        roughness: 0.3,
+        metalness: 0.8
+    });
+    const mainPipe = new THREE.Mesh(mainPipeGeo, mainPipeMat);
+    mainPipe.position.set(0, 0, 3);
+    mainPipe.rotation.x = Math.PI / 2;
+    mainPipe.castShadow = true;
+    mainPipe.receiveShadow = true;
+    scene.add(mainPipe);
+    pipes.push(mainPipe);
+}
+
+// 创建垂直管道系统
+function createVerticalPipes() {
+    // 垂直管道组 1
+    createVerticalPipeGroup(-3, 2, -5, 6, 0x558866);
+    
+    // 垂直管道组 2
+    createVerticalPipeGroup(5, 1, -3, 8, 0x665588);
+    
+    // 垂直管道组 3
+    createVerticalPipeGroup(-10, 1, 2, 7, 0x885566);
+}
+
+// 创建垂直管道组
+function createVerticalPipeGroup(x, z, startX, height, color) {
+    // 主垂直管道
+    const mainVerticalGeo = new THREE.CylinderGeometry(0.25, 0.25, height, 8);
+    const mainVerticalMat = new THREE.MeshStandardMaterial({
+        color: color,
+        roughness: 0.3,
+        metalness: 0.8
+    });
+    const mainVertical = new THREE.Mesh(mainVerticalGeo, mainVerticalMat);
+    mainVertical.position.set(x, height / 2, z);
+    mainVertical.castShadow = true;
+    mainVertical.receiveShadow = true;
+    scene.add(mainVertical);
+    pipes.push(mainVertical);
+    
+    // 添加阀门和连接
+    for (let i = 1; i < 4; i++) {
+        // 水平连接管
+        const horizontalGeo = new THREE.CylinderGeometry(0.15, 0.15, Math.abs(x - startX), 8);
+        const horizontalMat = mainVerticalMat.clone();
+        const horizontal = new THREE.Mesh(horizontalGeo, horizontalMat);
+        horizontal.rotation.z = Math.PI / 2;
+        horizontal.position.set((x + startX) / 2, i * 1.5, z);
+        horizontal.castShadow = true;
+        horizontal.receiveShadow = true;
+        scene.add(horizontal);
+        pipes.push(horizontal);
+        
+        // 阀门
+        const valveGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+        const valveMat = new THREE.MeshStandardMaterial({
+            color: 0xaa3311,
+            roughness: 0.5,
+            metalness: 0.7
+        });
+        const valve = new THREE.Mesh(valveGeo, valveMat);
+        valve.position.set(x, i * 1.5, z + 0.3);
+        valve.castShadow = true;
+        valve.receiveShadow = true;
+        scene.add(valve);
+        
+        // 阀门手轮
+        const wheelGeo = new THREE.TorusGeometry(0.3, 0.05, 8, 16);
+        const wheelMat = new THREE.MeshStandardMaterial({
+            color: 0xaa3311,
+            roughness: 0.4,
+            metalness: 0.6
+        });
+        const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+        wheel.rotation.x = Math.PI / 2;
+        wheel.position.set(0, 0, 0.3);
+        valve.add(wheel);
+    }
+    
+    // 顶部平台
+    const platformGeo = new THREE.BoxGeometry(2, 0.2, 2);
+    const platformMat = new THREE.MeshStandardMaterial({
+        color: COLORS.steel,
+        roughness: 0.6,
+        metalness: 0.5
+    });
+    const platform = new THREE.Mesh(platformGeo, platformMat);
+    platform.position.set(x, height + 0.1, z);
+    platform.castShadow = true;
+    platform.receiveShadow = true;
+    scene.add(platform);
+    
+    // 平台护栏
+    const railGeo = new THREE.CylinderGeometry(0.05, 0.05, 1, 8);
+    const railMat = new THREE.MeshStandardMaterial({
+        color: 0xaaaa33,
+        roughness: 0.4,
+        metalness: 0.6
+    });
+    
+    for (let i = 0; i < 4; i++) {
+        const angle = i * Math.PI / 2;
+        const rail = new THREE.Mesh(railGeo, railMat);
+        rail.position.set(
+            x + Math.cos(angle) * 0.9,
+            height + 0.7,
+            z + Math.sin(angle) * 0.9
+        );
+        rail.castShadow = true;
+        rail.receiveShadow = true;
+        scene.add(rail);
+    }
+}
+
+// 创建弯曲管道
+function createCurvedPipes() {
+    // 复杂的弯曲管道路径
+    const curvedPaths = [
+        [
+            new THREE.Vector3(-5, 0.5, -8),
+            new THREE.Vector3(-3, 1, -7),
+            new THREE.Vector3(-1, 2, -6),
+            new THREE.Vector3(1, 2, -5),
+            new THREE.Vector3(3, 1, -4),
+            new THREE.Vector3(5, 0.5, -3)
+        ],
+        [
+            new THREE.Vector3(5, 0.5, 2),
+            new THREE.Vector3(7, 1, 1),
+            new THREE.Vector3(8, 2, 0),
+            new THREE.Vector3(8, 3, -1),
+            new THREE.Vector3(7, 4, -2),
+            new THREE.Vector3(5, 4, -3)
+        ],
+        [
+            new THREE.Vector3(-10, 0.5, -2),
+            new THREE.Vector3(-9, 1, 0),
+            new THREE.Vector3(-8, 1.5, 2),
+            new THREE.Vector3(-7, 1, 4),
+            new THREE.Vector3(-6, 0.5, 6)
+        ]
+    ];
+    
+    const pipeColors = [0x55bbaa, 0x7766cc, 0xbb6677];
+    
+    // 创建弯曲管道
+    curvedPaths.forEach((path, index) => {
+        const curve = new THREE.CatmullRomCurve3(path);
+        
+        const tubeGeo = new THREE.TubeGeometry(curve, 50, 0.2, 8, false);
+        const tubeMat = new THREE.MeshStandardMaterial({
+            color: pipeColors[index % pipeColors.length],
+            roughness: 0.3,
+            metalness: 0.8
+        });
+        const tube = new THREE.Mesh(tubeGeo, tubeMat);
+        tube.castShadow = true;
+        tube.receiveShadow = true;
+        scene.add(tube);
+        pipes.push(tube);
+        
+        // 添加流动粒子
+        const particlesGeo = new THREE.SphereGeometry(0.15, 8, 8);
+        const particlesMat = new THREE.MeshStandardMaterial({
+            color: 0xaaffee,
+            transparent: true,
+            opacity: 0.8,
+            emissive: 0xaaffee,
+            emissiveIntensity: 0.2
+        });
+        
+        for (let i = 0; i < 8; i++) {
+            const particle = new THREE.Mesh(particlesGeo, particlesMat);
+            scene.add(particle);
+            
+            particles.push({
+                mesh: particle,
+                curve: curve,
+                speed: 0.001 + Math.random() * 0.002,
+                offset: i * 0.125,
+                progress: i * 0.125
+            });
+        }
+    });
+}
+
+// 创建建筑物周围的管道
+function createBuildingPipes() {
+    // 主建筑到侧建筑的连接管道
+    const buildingConnectorGeo = new THREE.CylinderGeometry(0.2, 0.2, 4, 8);
+    const buildingConnectorMat = new THREE.MeshStandardMaterial({
+        color: COLORS.pipes,
+        roughness: 0.3,
+        metalness: 0.8
+    });
+    
+    // 水平连接管
+    const connector1 = new THREE.Mesh(buildingConnectorGeo, buildingConnectorMat);
+    connector1.rotation.z = Math.PI / 2;
+    connector1.position.set(-3, 2, 0);
+    connector1.castShadow = true;
+    connector1.receiveShadow = true;
+    scene.add(connector1);
+    pipes.push(connector1);
+    
+    // 主建筑屋顶管道系统
+    const roofPipesGeo = new THREE.CylinderGeometry(0.15, 0.15, 1.5, 8);
+    const roofPipesMat = new THREE.MeshStandardMaterial({
+        color: 0x6688aa,
+        roughness: 0.3,
+        metalness: 0.8
+    });
+    
+    // 屋顶垂直管道
+    for (let i = 0; i < 3; i++) {
+        const roofPipe = new THREE.Mesh(roofPipesGeo, roofPipesMat);
+        roofPipe.position.set(i * 3 - 3, 4.25, 3);
+        roofPipe.castShadow = true;
+        roofPipe.receiveShadow = true;
+        scene.add(roofPipe);
+        pipes.push(roofPipe);
+        
+        // 管道顶部
+        const capGeo = new THREE.SphereGeometry(0.2, 8, 8);
+        const cap = new THREE.Mesh(capGeo, roofPipesMat);
+        cap.position.y = 0.75;
+        roofPipe.add(cap);
+    }
+}
+
+// 创建烟囱
+function createSmokestacks() {
+    for (let i = 0; i < 2; i++) {
+        const stackGeo = new THREE.CylinderGeometry(0.5, 0.7, 6, 8);
+        const stackMat = new THREE.MeshStandardMaterial({
+            color: 0x555555,
+            roughness: 0.7,
+            metalness: 0.3
+        });
+        const stack = new THREE.Mesh(stackGeo, stackMat);
+        
+        // 放在主建筑上方
+        stack.position.set(
+            i * 4 - 2,
+            5,
+            0
+        );
+        
+        stack.castShadow = true;
+        stack.receiveShadow = true;
+        scene.add(stack);
+        
+        // 添加烟囱装饰环
+        const ringGeo = new THREE.TorusGeometry(0.7, 0.1, 8, 16);
+        const ringMat = new THREE.MeshStandardMaterial({
+            color: 0x666666,
+            roughness: 0.6,
+            metalness: 0.4
+        });
+        
+        for (let j = 0; j < 3; j++) {
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = Math.PI / 2;
+            ring.position.y = j * 2 - 2;
+            stack.add(ring);
+        }
+        
+        // 添加烟雾粒子系统
+        const smokeSystem = {
+            stack: stack,
+            particles: [],
+            emitRate: 0.1
+        };
+        
+        smokestacks.push(smokeSystem);
+    }
+}
+
+// 创建冷却塔
+function createCoolingTowers() {
+    // 创建两个冷却塔
+    for (let i = 0; i < 2; i++) {
+        // 冷却塔基座
+        const baseGeo = new THREE.CylinderGeometry(1.5, 1.8, 0.5, 16);
+        const baseMat = new THREE.MeshStandardMaterial({
+            color: COLORS.coolingTower,
+            roughness: 0.7,
+            metalness: 0.2
+        });
+        const base = new THREE.Mesh(baseGeo, baseMat);
+        base.position.set(i * 5 - 12, 0.25, -6);
+        base.castShadow = true;
+        base.receiveShadow = true;
+        scene.add(base);
+        
+        // 冷却塔主体（双曲线形状）
+        const coolingTowerGeo = new THREE.CylinderGeometry(1, 1.5, 5, 16, 8, true);
+        // 修改几何体顶点以创建双曲线形状
+        for (let j = 0; j < coolingTowerGeo.attributes.position.count; j++) {
+            const y = coolingTowerGeo.attributes.position.getY(j);
+            const factor = 1 - Math.pow(y / 2.5, 2) * 0.3;
+            coolingTowerGeo.attributes.position.setX(j, coolingTowerGeo.attributes.position.getX(j) * factor);
+            coolingTowerGeo.attributes.position.setZ(j, coolingTowerGeo.attributes.position.getZ(j) * factor);
+        }
+        coolingTowerGeo.computeVertexNormals();
+        
+        const coolingTowerMat = new THREE.MeshStandardMaterial({
+            color: COLORS.coolingTower,
+            roughness: 0.8,
+            metalness: 0.2,
+            side: THREE.DoubleSide
+        });
+        const coolingTower = new THREE.Mesh(coolingTowerGeo, coolingTowerMat);
+        coolingTower.position.set(i * 5 - 12, 3, -6);
+        coolingTower.castShadow = true;
+        coolingTower.receiveShadow = true;
+        scene.add(coolingTower);
+        
+        // 冷却塔顶部
+        const topGeo = new THREE.CylinderGeometry(1.2, 1, 0.5, 16);
+        const topMat = new THREE.MeshStandardMaterial({
+            color: COLORS.coolingTower,
+            roughness: 0.7,
+            metalness: 0.3
+        });
+        const top = new THREE.Mesh(topGeo, topMat);
+        top.position.set(i * 5 - 12, 5.75, -6);
+        top.castShadow = true;
+        top.receiveShadow = true;
+        scene.add(top);
+        
+        // 添加冷却塔上升蒸汽效果
+        const steamSystem = {
+            position: new THREE.Vector3(i * 5 - 12, 6, -6),
+            particles: [],
+            emitRate: 0.05
+        };
+        
+        smokestacks.push(steamSystem);
+    }
+}
+
+// 创建控制室
+function createControlRoom() {
+    // 控制室主体
+    const controlRoomGeo = new THREE.BoxGeometry(4, 2.5, 3);
+    const controlRoomMat = new THREE.MeshStandardMaterial({
+        color: COLORS.control,
+        roughness: 0.6,
+        metalness: 0.4
+    });
+    const controlRoom = new THREE.Mesh(controlRoomGeo, controlRoomMat);
+    controlRoom.position.set(7, 0.75, -7);
+    controlRoom.castShadow = true;
+    controlRoom.receiveShadow = true;
+    scene.add(controlRoom);
+    
+    // 控制室屋顶
+    const roofGeo = new THREE.BoxGeometry(4.5, 0.3, 3.5);
+    const roofMat = new THREE.MeshStandardMaterial({
+        color: 0x334455,
+        roughness: 0.7,
+        metalness: 0.3
+    });
+    const roof = new THREE.Mesh(roofGeo, roofMat);
+    roof.position.set(7, 2.15, -7);
+    roof.castShadow = true;
+    roof.receiveShadow = true;
+    scene.add(roof);
+    
+    // 控制室窗户
+    const windowGeo = new THREE.BoxGeometry(3, 1, 0.1);
+    const windowMat = new THREE.MeshStandardMaterial({
+        color: 0x88ccff,
+        roughness: 0.2,
+        metalness: 0.8,
+        transparent: true,
+        opacity: 0.7,
+        emissive: 0x88ccff,
+        emissiveIntensity: 0.2
+    });
+    const window1 = new THREE.Mesh(windowGeo, windowMat);
+    window1.position.set(7, 1, -5.45);
+    scene.add(window1);
+    
+    const window2 = new THREE.Mesh(windowGeo, windowMat);
+    window2.position.set(7, 1, -8.55);
+    window2.rotation.y = Math.PI;
+    scene.add(window2);
+    
+    const sideWindowGeo = new THREE.BoxGeometry(0.1, 1, 2);
+    const sideWindow1 = new THREE.Mesh(sideWindowGeo, windowMat);
+    sideWindow1.position.set(9.05, 1, -7);
+    scene.add(sideWindow1);
+    
+    const sideWindow2 = new THREE.Mesh(sideWindowGeo, windowMat);
+    sideWindow2.position.set(4.95, 1, -7);
+    scene.add(sideWindow2);
+    
+    // 控制室门
+    const doorGeo = new THREE.BoxGeometry(1, 2, 0.1);
+    const doorMat = new THREE.MeshStandardMaterial({
+        color: 0x334455,
+        roughness: 0.5,
+        metalness: 0.6
+    });
+    const door = new THREE.Mesh(doorGeo, doorMat);
+    door.position.set(5.5, 0.5, -5.45);
+    scene.add(door);
+    
+    // 创建控制面板
+    createControlPanels(controlRoom);
+    
+    // 保存控制室引用
+    controlRooms.push(controlRoom);
+}
+
+// 创建控制面板
+function createControlPanels(controlRoom) {
+    // 控制台
+    const consoleGeo = new THREE.BoxGeometry(3, 1, 1);
+    const consoleMat = new THREE.MeshStandardMaterial({
+        color: 0x333333,
+        roughness: 0.5,
+        metalness: 0.7
+    });
+    const console1 = new THREE.Mesh(consoleGeo, consoleMat);
+    console1.position.set(0, -0.25, -0.5);
+    controlRoom.add(console1);
+    
+    // 控制按钮和灯光
+    const colors = [0xff0000, 0x00ff00, 0xffff00, 0x00aaff];
+    for (let i = 0; i < 12; i++) {
+        // 按钮
+        const buttonGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.05, 8);
+        const buttonMat = new THREE.MeshStandardMaterial({
+            color: colors[i % colors.length],
+            roughness: 0.3,
+            metalness: 0.8,
+            emissive: colors[i % colors.length],
+            emissiveIntensity: 0.5
+        });
+        const button = new THREE.Mesh(buttonGeo, buttonMat);
+        
+        const row = Math.floor(i / 4);
+        const col = i % 4;
+        button.position.set(
+            col * 0.5 - 0.75,
+            0.55,
+            row * 0.3 - 0.8
+        );
+        button.rotation.x = Math.PI / 2;
+        console1.add(button);
+        
+        // 添加闪烁效果到控制灯
+        lights.push({
+            light: null,
+            mesh: button,
+            intensity: 0.5,
+            minIntensity: 0.2,
+            maxIntensity: 0.8,
+            speed: 0.1 + Math.random() * 0.2,
+            phase: Math.random() * Math.PI * 2,
+            material: buttonMat
+        });
+    }
+    
+    // 控制屏幕
+    const screenGeo = new THREE.BoxGeometry(2, 0.8, 0.1);
+    const screenMat = new THREE.MeshStandardMaterial({
+        color: 0x222222,
+        roughness: 0.3,
+        metalness: 0.7,
+        emissive: 0x006699,
+        emissiveIntensity: 0.3
+    });
+    const screen = new THREE.Mesh(screenGeo, screenMat);
+    screen.position.set(0, 0.9, -0.9);
+    screen.rotation.x = Math.PI / 6;
+    console1.add(screen);
+}
+
+// 创建热交换器
+function createHeatExchangers() {
+    // 位置
+    const positions = [
+        new THREE.Vector3(9, 0, 5),
+        new THREE.Vector3(12, 0, 2)
+    ];
+    
+    // 为每个位置创建热交换器
+    positions.forEach(pos => {
+        // 基座
+        const baseGeo = new THREE.BoxGeometry(3, 0.5, 1.5);
+        const baseMat = new THREE.MeshStandardMaterial({
+            color: COLORS.steel,
+            roughness: 0.6,
+            metalness: 0.5
+        });
+        const base = new THREE.Mesh(baseGeo, baseMat);
+        base.position.set(pos.x, pos.y + 0.25, pos.z);
+        base.castShadow = true;
+        base.receiveShadow = true;
+        scene.add(base);
+        
+        // 主体部分 - 横向圆柱
+        const bodyGeo = new THREE.CylinderGeometry(0.6, 0.6, 2.5, 16);
+        const bodyMat = new THREE.MeshStandardMaterial({
+            color: COLORS.equipment,
+            roughness: 0.4,
+            metalness: 0.7
+        });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.rotation.z = Math.PI / 2;
+        body.position.set(pos.x, pos.y + 1.4, pos.z);
+        body.castShadow = true;
+        body.receiveShadow = true;
+        scene.add(body);
+        
+        // 端盖
+        const capGeo = new THREE.CylinderGeometry(0.7, 0.7, 0.2, 16);
+        const capMat = new THREE.MeshStandardMaterial({
+            color: 0x777777,
+            roughness: 0.5,
+            metalness: 0.8
+        });
+        
+        const cap1 = new THREE.Mesh(capGeo, capMat);
+        cap1.rotation.z = Math.PI / 2;
+        cap1.position.set(pos.x - 1.35, pos.y + 1.4, pos.z);
+        cap1.castShadow = true;
+        cap1.receiveShadow = true;
+        scene.add(cap1);
+        
+        const cap2 = new THREE.Mesh(capGeo, capMat);
+        cap2.rotation.z = Math.PI / 2;
+        cap2.position.set(pos.x + 1.35, pos.y + 1.4, pos.z);
+        cap2.castShadow = true;
+        cap2.receiveShadow = true;
+        scene.add(cap2);
+        
+        // 连接管道
+        const pipe1Geo = new THREE.CylinderGeometry(0.2, 0.2, 1, 8);
+        const pipe1Mat = new THREE.MeshStandardMaterial({
+            color: COLORS.pipes,
+            roughness: 0.3,
+            metalness: 0.8
+        });
+        
+        const pipe1 = new THREE.Mesh(pipe1Geo, pipe1Mat);
+        pipe1.rotation.x = Math.PI / 2;
+        pipe1.position.set(pos.x - 1, pos.y + 2.2, pos.z);
+        pipe1.castShadow = true;
+        pipe1.receiveShadow = true;
+        scene.add(pipe1);
+        pipes.push(pipe1);
+        
+        const pipe2 = new THREE.Mesh(pipe1Geo, pipe1Mat);
+        pipe2.rotation.x = Math.PI / 2;
+        pipe2.position.set(pos.x + 1, pos.y + 2.2, pos.z);
+        pipe2.castShadow = true;
+        pipe2.receiveShadow = true;
+        scene.add(pipe2);
+        pipes.push(pipe2);
+        
+        const pipe3 = new THREE.Mesh(pipe1Geo, pipe1Mat);
+        pipe3.rotation.x = Math.PI / 2;
+        pipe3.position.set(pos.x - 1, pos.y + 0.6, pos.z);
+        pipe3.castShadow = true;
+        pipe3.receiveShadow = true;
+        scene.add(pipe3);
+        pipes.push(pipe3);
+        
+        const pipe4 = new THREE.Mesh(pipe1Geo, pipe1Mat);
+        pipe4.rotation.x = Math.PI / 2;
+        pipe4.position.set(pos.x + 1, pos.y + 0.6, pos.z);
+        pipe4.castShadow = true;
+        pipe4.receiveShadow = true;
+        scene.add(pipe4);
+        pipes.push(pipe4);
+    });
+}
+
+// 创建厂区边界和围墙
+function createPerimeterFence() {
+    // 围墙参数
+    const fenceLength = 50;
+    const postSpacing = 5;
+    const fenceHeight = 2;
+    
+    // 围墙材质
+    const postMat = new THREE.MeshStandardMaterial({
+        color: 0x555555,
+        roughness: 0.7,
+        metalness: 0.3
+    });
+    
+    const fenceMat = new THREE.MeshStandardMaterial({
+        color: 0x777777,
+        roughness: 0.6,
+        metalness: 0.2,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.8
+    });
+    
+    // 创建四面围墙
+    for (let side = 0; side < 4; side++) {
+        const postsCount = Math.floor(fenceLength / postSpacing) + 1;
+        
+        // 确定当前边的起始和结束点
+        let startX, startZ, endX, endZ;
+        
+        switch (side) {
+            case 0: // 北边
+                startX = -fenceLength / 2;
+                startZ = -fenceLength / 2;
+                endX = fenceLength / 2;
+                endZ = -fenceLength / 2;
+                break;
+            case 1: // 东边
+                startX = fenceLength / 2;
+                startZ = -fenceLength / 2;
+                endX = fenceLength / 2;
+                endZ = fenceLength / 2;
+                break;
+            case 2: // 南边
+                startX = fenceLength / 2;
+                startZ = fenceLength / 2;
+                endX = -fenceLength / 2;
+                endZ = fenceLength / 2;
+                break;
+            case 3: // 西边
+                startX = -fenceLength / 2;
+                startZ = fenceLength / 2;
+                endX = -fenceLength / 2;
+                endZ = -fenceLength / 2;
+                break;
+        }
+        
+        // 计算栅栏的方向
+        const direction = new THREE.Vector3(endX - startX, 0, endZ - startZ).normalize();
+        const angle = Math.atan2(direction.z, direction.x);
+        
+        // 创建栅栏面板
+        const panelGeo = new THREE.PlaneGeometry(postSpacing, fenceHeight);
+        
+        // 创建围栏支柱
+        const postGeo = new THREE.BoxGeometry(0.2, fenceHeight, 0.2);
+        
+        for (let i = 0; i < postsCount; i++) {
+            const t = i / (postsCount - 1);
+            const x = startX + (endX - startX) * t;
+            const z = startZ + (endZ - startZ) * t;
+            
+            // 创建支柱
+            const post = new THREE.Mesh(postGeo, postMat);
+            post.position.set(x, fenceHeight / 2, z);
+            post.castShadow = true;
+            post.receiveShadow = true;
+            scene.add(post);
+            
+            // 创建面板（除了最后一个位置）
+            if (i < postsCount - 1) {
+                const panel = new THREE.Mesh(panelGeo, fenceMat);
+                panel.position.set(
+                    x + direction.x * postSpacing / 2,
+                    fenceHeight / 2,
+                    z + direction.z * postSpacing / 2
+                );
+                panel.rotation.y = angle + Math.PI / 2;
+                panel.castShadow = true;
+                panel.receiveShadow = true;
+                scene.add(panel);
+            }
+        }
+    }
+    
+    // 创建入口大门
+    createEntrance();
+}
+
+// 创建入口大门
+function createEntrance() {
+    // 门柱
+    const gatePostGeo = new THREE.BoxGeometry(0.4, 3, 0.4);
+    const gatePostMat = new THREE.MeshStandardMaterial({
+        color: 0x777777,
+        roughness: 0.6,
+        metalness: 0.4
+    });
+    
+    const gatePost1 = new THREE.Mesh(gatePostGeo, gatePostMat);
+    gatePost1.position.set(-3, 1.5, -25);
+    gatePost1.castShadow = true;
+    gatePost1.receiveShadow = true;
+    scene.add(gatePost1);
+    
+    const gatePost2 = new THREE.Mesh(gatePostGeo, gatePostMat);
+    gatePost2.position.set(3, 1.5, -25);
+    gatePost2.castShadow = true;
+    gatePost2.receiveShadow = true;
+    scene.add(gatePost2);
+    
+    // 横梁
+    const beamGeo = new THREE.BoxGeometry(6.8, 0.4, 0.4);
+    const beamMat = new THREE.MeshStandardMaterial({
+        color: 0x666666,
+        roughness: 0.5,
+        metalness: 0.5
+    });
+    
+    const beam = new THREE.Mesh(beamGeo, beamMat);
+    beam.position.set(0, 3, -25);
+    beam.castShadow = true;
+    beam.receiveShadow = true;
+    scene.add(beam);
+    
+    // 入口路径
+    const pathGeo = new THREE.PlaneGeometry(6, 20);
+    const pathMat = new THREE.MeshStandardMaterial({
+        color: 0x888888,
+        roughness: 1.0,
+        metalness: 0.0
+    });
+    
+    const path = new THREE.Mesh(pathGeo, pathMat);
+    path.rotation.x = -Math.PI / 2;
+    path.position.set(0, -0.48, -15);
+    path.receiveShadow = true;
+    scene.add(path);
+    
+    // 入口标志
+    const signGeo = new THREE.BoxGeometry(5, 1, 0.1);
+    const signMat = new THREE.MeshStandardMaterial({
+        color: 0x335588,
+        roughness: 0.4,
+        metalness: 0.6
+    });
+    
+    const sign = new THREE.Mesh(signGeo, signMat);
+    sign.position.set(0, 2.5, -25.2);
+    sign.castShadow = true;
+    sign.receiveShadow = true;
+    scene.add(sign);
+}
+
+// 创建辅助设备
+function createAuxiliaryEquipment() {
+    // 创建变压器
+    createTransformer(10, -10);
+    createTransformer(12, -12);
+    
+    // 创建泵站
+    createPumpStation(-8, 10);
+    
+    // 创建存储区
+    createStorageArea(12, 10);
+    
+    // 创建空调设备
+    createACUnit(8, -12);
+}
+
+// 创建变压器
+function createTransformer(x, z) {
+    // 变压器基座
+    const baseGeo = new THREE.BoxGeometry(2, 0.5, 2);
+    const baseMat = new THREE.MeshStandardMaterial({
+        color: 0x999999,
+        roughness: 0.8,
+        metalness: 0.2
+    });
+    const base = new THREE.Mesh(baseGeo, baseMat);
+    base.position.set(x, 0.25, z);
+    base.castShadow = true;
+    base.receiveShadow = true;
+    scene.add(base);
+    
+    // 变压器主体
+    const bodyGeo = new THREE.BoxGeometry(1.5, 2, 1.5);
+    const bodyMat = new THREE.MeshStandardMaterial({
+        color: 0x667788,
+        roughness: 0.5,
+        metalness: 0.5
+    });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.set(x, 1.5, z);
+    body.castShadow = true;
+    body.receiveShadow = true;
+    scene.add(body);
+    
+    // 变压器顶部绝缘体
+    const insulatorGeo = new THREE.CylinderGeometry(0.1, 0.1, 1, 8);
+    const insulatorMat = new THREE.MeshStandardMaterial({
+        color: 0xaaaaaa,
+        roughness: 0.3,
+        metalness: 0.8
+    });
+    
+    for (let i = 0; i < 3; i++) {
+        const insulator = new THREE.Mesh(insulatorGeo, insulatorMat);
+        insulator.position.set(x + (i - 1) * 0.4, 3, z);
+        insulator.castShadow = true;
+        insulator.receiveShadow = true;
+        scene.add(insulator);
+        
+        // 顶部连接件
+        const capGeo = new THREE.SphereGeometry(0.15, 8, 8);
+        const capMat = new THREE.MeshStandardMaterial({
+            color: 0x888888,
+            roughness: 0.4,
+            metalness: 0.7
+        });
+        const cap = new THREE.Mesh(capGeo, capMat);
+        cap.position.y = 0.6;
+        insulator.add(cap);
+    }
+}
+
+// 创建泵站
+function createPumpStation(x, z) {
+    // 泵站平台
+    const platformGeo = new THREE.BoxGeometry(3, 0.5, 2);
+    const platformMat = new THREE.MeshStandardMaterial({
+        color: 0x999999,
+        roughness: 0.8,
+        metalness: 0.2
+    });
+    const platform = new THREE.Mesh(platformGeo, platformMat);
+    platform.position.set(x, 0.25, z);
+    platform.castShadow = true;
+    platform.receiveShadow = true;
+    scene.add(platform);
+    
+    // 泵主体
+    const pumpGeo = new THREE.BoxGeometry(1, 1, 0.8);
+    const pumpMat = new THREE.MeshStandardMaterial({
+        color: 0x3377aa,
+        roughness: 0.4,
+        metalness: 0.7
+    });
+    const pump = new THREE.Mesh(pumpGeo, pumpMat);
+    pump.position.set(x, 1, z);
+    pump.castShadow = true;
+    pump.receiveShadow = true;
+    scene.add(pump);
+    
+    // 电机
+    const motorGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.8, 16);
+    const motorMat = new THREE.MeshStandardMaterial({
+        color: 0x777777,
+        roughness: 0.5,
+        metalness: 0.6
+    });
+    const motor = new THREE.Mesh(motorGeo, motorMat);
+    motor.rotation.x = Math.PI / 2;
+    motor.position.set(x - 1, 1, z);
+    motor.castShadow = true;
+    motor.receiveShadow = true;
+    scene.add(motor);
+    
+    // 连接泵的管道
+    const pipe1Geo = new THREE.CylinderGeometry(0.15, 0.15, 1, 8);
+    const pipe1Mat = new THREE.MeshStandardMaterial({
+        color: COLORS.pipes,
+        roughness: 0.3,
+        metalness: 0.8
+    });
+    const pipe1 = new THREE.Mesh(pipe1Geo, pipe1Mat);
+    pipe1.rotation.z = Math.PI / 2;
+    pipe1.position.set(x - 0.5, 0.9, z);
+    pipe1.castShadow = true;
+    pipe1.receiveShadow = true;
+    scene.add(pipe1);
+    pipes.push(pipe1);
+    
+    const pipe2 = new THREE.Mesh(pipe1Geo, pipe1Mat);
+    pipe2.rotation.z = Math.PI / 2;
+    pipe2.position.set(x + 0.9, 0.9, z);
+    pipe2.castShadow = true;
+    pipe2.receiveShadow = true;
+    scene.add(pipe2);
+    pipes.push(pipe2);
+    
+    // 垂直管道
+    const pipe3Geo = new THREE.CylinderGeometry(0.15, 0.15, 3, 8);
+    const pipe3 = new THREE.Mesh(pipe3Geo, pipe1Mat);
+    pipe3.position.set(x + 1.4, 1.5, z);
+    pipe3.castShadow = true;
+    pipe3.receiveShadow = true;
+    scene.add(pipe3);
+    pipes.push(pipe3);
+    
+    // 旋转风扇
+    const fanBladeGeo = new THREE.BoxGeometry(0.6, 0.05, 0.15);
+    const fanBladeMat = new THREE.MeshStandardMaterial({
+        color: 0x999999,
+        roughness: 0.5,
+        metalness: 0.5
+    });
+    
+    const fanHub = new THREE.Object3D();
+    fanHub.position.set(x - 1.5, 1, z);
+    scene.add(fanHub);
+    
+    // 创建扇叶
+    for (let i = 0; i < 4; i++) {
+        const blade = new THREE.Mesh(fanBladeGeo, fanBladeMat);
+        blade.rotation.y = i * Math.PI / 2;
+        blade.position.x = 0.3;
+        fanHub.add(blade);
+    }
+    
+    // 风扇中心
+    const hubGeo = new THREE.SphereGeometry(0.1, 8, 8);
+    const hub = new THREE.Mesh(hubGeo, fanBladeMat);
+    fanHub.add(hub);
+    
+    // 添加风扇到动画更新列表
+    fans.push(fanHub);
+}
+
+// 创建存储区
+function createStorageArea(x, z) {
+    // 存储平台
+    const platformGeo = new THREE.BoxGeometry(6, 0.2, 4);
+    const platformMat = new THREE.MeshStandardMaterial({
+        color: 0x999999,
+        roughness: 0.9,
+        metalness: 0.1
+    });
+    const platform = new THREE.Mesh(platformGeo, platformMat);
+    platform.position.set(x, 0.1, z);
+    platform.receiveShadow = true;
+    scene.add(platform);
+    
+    // 创建一些桶和箱子
+    for (let i = 0; i < 8; i++) {
+        const isBarrel = Math.random() > 0.5;
+        
+        if (isBarrel) {
+            // 创建桶
+            const barrelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.8, 12);
+            const barrelMat = new THREE.MeshStandardMaterial({
+                color: 0x3355aa,
+                roughness: 0.6,
+                metalness: 0.4
+            });
+            const barrel = new THREE.Mesh(barrelGeo, barrelMat);
+            
+            // 随机放置在存储区
+            barrel.position.set(
+                x + (Math.random() - 0.5) * 5,
+                0.6,
+                z + (Math.random() - 0.5) * 3
+            );
+            barrel.castShadow = true;
+            barrel.receiveShadow = true;
+            scene.add(barrel);
+            
+            // 添加桶顶环
+            const ringGeo = new THREE.TorusGeometry(0.3, 0.05, 8, 16);
+            const ringMat = new THREE.MeshStandardMaterial({
+                color: 0x444444,
+                roughness: 0.5,
+                metalness: 0.6
+            });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = Math.PI / 2;
+            ring.position.y = 0.4;
+            barrel.add(ring);
+        } else {
+            // 创建箱子
+            const boxGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
+            const boxMat = new THREE.MeshStandardMaterial({
+                color: 0xaa6633,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            const box = new THREE.Mesh(boxGeo, boxMat);
+            
+            // 随机放置在存储区
+            box.position.set(
+                x + (Math.random() - 0.5) * 5,
+                0.5,
+                z + (Math.random() - 0.5) * 3
+            );
+            box.rotation.y = Math.random() * Math.PI;
+            box.castShadow = true;
+            box.receiveShadow = true;
+            scene.add(box);
+        }
+    }
+}
+
+// 创建空调设备
+function createACUnit(x, z) {
+    // 空调外机基座
+    const baseGeo = new THREE.BoxGeometry(2, 0.3, 1.5);
+    const baseMat = new THREE.MeshStandardMaterial({
+        color: 0x999999,
+        roughness: 0.8,
+        metalness: 0.1
+    });
+    const base = new THREE.Mesh(baseGeo, baseMat);
+    base.position.set(x, 0.15, z);
+    base.receiveShadow = true;
+    scene.add(base);
+    
+    // 空调外机主体
+    const bodyGeo = new THREE.BoxGeometry(1.8, 1, 1.3);
+    const bodyMat = new THREE.MeshStandardMaterial({
+        color: 0x889988,
+        roughness: 0.6,
+        metalness: 0.4
+    });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.set(x, 0.8, z);
+    body.castShadow = true;
+    body.receiveShadow = true;
+    scene.add(body);
+    
+    // 空调格栅
+    const grillGeo = new THREE.PlaneGeometry(1.6, 0.8);
+    const grillMat = new THREE.MeshStandardMaterial({
+        color: 0x555555,
+        roughness: 0.6,
+        metalness: 0.5,
+        side: THREE.DoubleSide
+    });
+    const grill = new THREE.Mesh(grillGeo, grillMat);
+    grill.rotation.x = Math.PI / 2;
+    grill.position.set(x, 1.3, z);
+    scene.add(grill);
+    
+    // 管道连接
+    const pipeGeo = new THREE.CylinderGeometry(0.1, 0.1, 2, 8);
+    const pipeMat = new THREE.MeshStandardMaterial({
+        color: 0x777777,
+        roughness: 0.3,
+        metalness: 0.8
+    });
+    const pipe = new THREE.Mesh(pipeGeo, pipeMat);
+    pipe.rotation.z = Math.PI / 2;
+    pipe.position.set(x - 1.9, 0.8, z);
+    pipe.castShadow = true;
+    pipe.receiveShadow = true;
+    scene.add(pipe);
+    
+    // 风扇
+    const fanGeo = new THREE.CircleGeometry(0.4, 16);
+    const fanMat = new THREE.MeshStandardMaterial({
+        color: 0x333333,
+        roughness: 0.5,
+        metalness: 0.6,
+        side: THREE.DoubleSide
+    });
+    const fan = new THREE.Mesh(fanGeo, fanMat);
+    fan.rotation.y = Math.PI / 2;
+    fan.position.set(x, 0.8, z + 0.65);
+    scene.add(fan);
+    
+    // 扇叶
+    const fanBlades = new THREE.Object3D();
+    fanBlades.position.copy(fan.position);
+    scene.add(fanBlades);
+    
+    const bladeGeo = new THREE.BoxGeometry(0.05, 0.35, 0.05);
+    const bladeMat = new THREE.MeshStandardMaterial({
+        color: 0x666666,
+        roughness: 0.5,
+        metalness: 0.5
+    });
+    
+    for (let i = 0; i < 5; i++) {
+        const blade = new THREE.Mesh(bladeGeo, bladeMat);
+        blade.position.y = 0.2;
+        blade.rotation.z = i * Math.PI * 2 / 5;
+        fanBlades.add(blade);
+    }
+    
+    fans.push(fanBlades);
+}
+
+// 调整窗口大小
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// 创建烟雾粒子
+function createSmokeParticle(smokeStack) {
+    const particle = new THREE.Object3D();
+    
+    // 粒子几何体
+    const geometry = new THREE.SphereGeometry(0.5, 8, 8);
+    const material = new THREE.MeshStandardMaterial({
+        color: COLORS.smoke,
+        transparent: true,
+        opacity: 0.4
+    });
+    
+    const mesh = new THREE.Mesh(geometry, material);
+    particle.add(mesh);
+    
+    // 设置粒子位置
+    if (smokeStack.stack) {
+        // 烟囱类型
+        particle.position.copy(smokeStack.stack.position);
+        particle.position.y += 3;
+    } else if (smokeStack.position) {
+        // 冷却塔类型
+        particle.position.copy(smokeStack.position);
+    }
+    
+    // 随机位置偏移
+    particle.position.x += (Math.random() - 0.5) * 0.3;
+    particle.position.z += (Math.random() - 0.5) * 0.3;
+    
+    scene.add(particle);
+    
+    return {
+        mesh: particle,
+        life: 0,
+        maxLife: 3 + Math.random() * 2,
+        speed: new THREE.Vector3(
+            (Math.random() - 0.5) * 0.2,
+            0.2 + Math.random() * 0.3,
+            (Math.random() - 0.5) * 0.2
+        ),
+        rotation: new THREE.Vector3(
+            Math.random() * 0.02,
+            Math.random() * 0.02,
+            Math.random() * 0.02
+        ),
+        size: 1
+    };
+}
+
+// 更新烟雾粒子
+function updateSmoke(delta) {
+    // 对每个烟囱/蒸汽源
+    smokestacks.forEach(smokeStack => {
+        // 创建新的烟雾粒子
+        smokeStack.emitRate -= delta;
+        if (smokeStack.emitRate <= 0) {
+            smokeStack.particles.push(createSmokeParticle(smokeStack));
+            smokeStack.emitRate = 0.2 + Math.random() * 0.3;
+        }
+        
+        // 更新现有粒子
+        for (let i = smokeStack.particles.length - 1; i >= 0; i--) {
+            const particle = smokeStack.particles[i];
+            
+            // 更新生命周期
+            particle.life += delta;
+            
+            if (particle.life >= particle.maxLife) {
+                // 移除过期粒子
+                scene.remove(particle.mesh);
+                smokeStack.particles.splice(i, 1);
+            } else {
+                // 更新位置
+                particle.mesh.position.add(
+                    particle.speed.clone().multiplyScalar(delta)
+                );
+                
+                // 随机旋转
+                particle.mesh.rotation.x += particle.rotation.x;
+                particle.mesh.rotation.y += particle.rotation.y;
+                particle.mesh.rotation.z += particle.rotation.z;
+                
+                // 改变大小
+                const scale = 1 + particle.life / particle.maxLife;
+                particle.mesh.scale.set(scale, scale, scale);
+                
+                // 降低不透明度
+                const material = particle.mesh.children[0].material;
+                material.opacity = 0.4 * (1 - particle.life / particle.maxLife);
+            }
+        }
+    });
+}
+
+// 更新管道粒子
+function updatePipeParticles(delta) {
+    particles.forEach(particle => {
+        // 更新进度
+        particle.progress += particle.speed;
+        if (particle.progress > 1) {
+            particle.progress = 0;
+        }
+        
+        // 沿曲线移动粒子
+        const position = particle.curve.getPointAt(particle.progress);
+        particle.mesh.position.copy(position);
+    });
+}
+
+// 更新储罐液体高度和压力表
+function updateTanks(delta) {
+    tanks.forEach(tank => {
+        // 改变液体高度
+        tank.currentHeight += tank.direction * tank.speed * delta;
+        
+        // 反向运动
+        if (tank.currentHeight > tank.maxHeight || tank.currentHeight < tank.minHeight) {
+            tank.direction *= -1;
+        }
+        
+        // 约束高度
+        tank.currentHeight = Math.max(tank.minHeight, Math.min(tank.maxHeight, tank.currentHeight));
+        
+        // 更新液体几何体
+        tank.liquid.scale.y = tank.currentHeight / tank.maxHeight;
+        
+        // 更新压力表指针（如果存在）
+        if (tank.gauge) {
+            tank.gauge.currentAngle += tank.gauge.direction * tank.gauge.speed * delta;
+            
+            // 反向旋转
+            if (tank.gauge.currentAngle > tank.gauge.maxAngle || tank.gauge.currentAngle < tank.gauge.minAngle) {
+                tank.gauge.direction *= -1;
+            }
+            
+            // 约束角度
+            tank.gauge.currentAngle = Math.max(tank.gauge.minAngle, Math.min(tank.gauge.maxAngle, tank.gauge.currentAngle));
+            
+            // 更新指针旋转
+            tank.gauge.needle.rotation.z = tank.gauge.currentAngle;
+        }
+    });
+}
+
+// 更新灯光
+function updateLights(delta) {
+    lights.forEach(light => {
+        // 闪烁效果
+        const time = clock.getElapsedTime() * light.speed + light.phase;
+        light.intensity = light.minIntensity + Math.sin(time) * (light.maxIntensity - light.minIntensity);
+        
+        if (light.light) {
+            // 更新点光源强度
+            light.light.intensity = light.intensity;
+            
+            // 对于警示灯增加额外的闪烁逻辑
+            if (light.isWarning) {
+                // 让警示灯呈现闪烁状态
+                const blink = Math.sin(time * 5) > 0;
+                light.light.visible = blink;
+                if (light.bulb) {
+                    light.bulb.material.emissiveIntensity = blink ? 0.8 : 0.1;
+                }
+            }
+        }
+        
+        // 更新材质自发光（用于控制面板灯）
+        if (light.material) {
+            light.material.emissiveIntensity = light.intensity;
+        }
+        
+        // 更新网格（如果有）
+        if (light.mesh && !light.material) {
+            // 因为没有直接访问材质，所以假设它是mesh的第一个材质
+            if (light.mesh.material) {
+                light.mesh.material.emissiveIntensity = light.intensity;
+            }
+        }
+    });
+}
+
+// 更新风扇旋转
+function updateFans(delta) {
+    fans.forEach(fan => {
+        fan.rotation.z += delta * 3;
+    });
+}
+
+// 动画循环
+function animate() {
+    requestAnimationFrame(animate);
+    
+    // 获取帧间隔时间
+    const delta = clock.getDelta();
+    
+    // 更新控制器
+    controls.update();
+    
+    // 更新各种动态元素
+    updateSmoke(delta);
+    updatePipeParticles(delta);
+    updateTanks(delta);
+    updateLights(delta);
+    updateFans(delta);
+    
+    // 渲染
+    renderer.render(scene, camera);
+}
+
+// 创建行人走道和护栏
+function createWalkways() {
+    // 主走道
+    const walkwayPositions = [
+        {start: new THREE.Vector3(0, 0, 4), end: new THREE.Vector3(0, 0, 7), width: 2},
+        {start: new THREE.Vector3(-4, 0, 7), end: new THREE.Vector3(4, 0, 7), width: 1.5},
+        {start: new THREE.Vector3(4, 0, -3), end: new THREE.Vector3(7, 0, -7), width: 1.5},
+        {start: new THREE.Vector3(-6, 0, 0), end: new THREE.Vector3(-8, 0, -6), width: 1.5}
+    ];
+    
+    walkwayPositions.forEach(walkway => {
+        createWalkway(walkway.start, walkway.end, walkway.width);
+    });
+}
+
+// 创建单个走道
+function createWalkway(start, end, width) {
+    // 计算走道长度和角度
+    const direction = new THREE.Vector3().subVectors(end, start);
+    const length = direction.length();
+    const angle = Math.atan2(direction.z, direction.x);
+    
+    // 走道平台
+    const walkwayGeo = new THREE.BoxGeometry(length, 0.1, width);
+    const walkwayMat = new THREE.MeshStandardMaterial({
+        color: COLORS.walkway,
+        roughness: 0.9,
+        metalness: 0.1
+    });
+    const walkway = new THREE.Mesh(walkwayGeo, walkwayMat);
+    
+    // 定位走道
+    walkway.position.set(
+        (start.x + end.x) / 2,
+        start.y + 0.05,
+        (start.z + end.z) / 2
+    );
+    walkway.rotation.y = angle;
+    walkway.receiveShadow = true;
+    scene.add(walkway);
+    
+    // 添加护栏
+    if (width > 1) {
+        createRailings(start, end, width, angle);
+    }
+}
+
+// 创建护栏
+function createRailings(start, end, width, angle) {
+    const railingHeight = 1;
+    const postSpacing = 2;
+    const halfWidth = width / 2;
+    
+    // 计算方向向量和垂直向量
+    const direction = new THREE.Vector3().subVectors(end, start).normalize();
+    const perpendicular = new THREE.Vector3(-direction.z, 0, direction.x);
+    const length = new THREE.Vector3().subVectors(end, start).length();
+    
+    // 计算柱子数量
+    const postsCount = Math.ceil(length / postSpacing) + 1;
+    
+    // 材质
+    const postMat = new THREE.MeshStandardMaterial({
+        color: 0x777788,
+        roughness: 0.5,
+        metalness: 0.6
+    });
+    
+    const railMat = new THREE.MeshStandardMaterial({
+        color: 0x888899,
+        roughness: 0.4,
+        metalness: 0.7
+    });
+    
+    // 创建两侧护栏
+    for (let side = -1; side <= 1; side += 2) {
+        // 跳过可能不需要护栏的一侧
+        if (side === -1 && Math.random() > 0.7) continue;
+        
+        const sideOffset = perpendicular.clone().multiplyScalar(halfWidth * side);
+        
+        // 创建立柱
+        for (let i = 0; i < postsCount; i++) {
+            const t = i / (postsCount - 1);
+            const postPos = new THREE.Vector3()
+                .lerpVectors(start, end, t)
+                .add(sideOffset);
+            
+            const postGeo = new THREE.CylinderGeometry(0.05, 0.05, railingHeight, 6);
+            const post = new THREE.Mesh(postGeo, postMat);
+            post.position.set(postPos.x, postPos.y + railingHeight / 2, postPos.z);
+            post.castShadow = true;
+            post.receiveShadow = true;
+            scene.add(post);
+        }
+        
+        // 顶部横杆
+        const topRailGeo = new THREE.CylinderGeometry(0.04, 0.04, length, 8);
+        const topRail = new THREE.Mesh(topRailGeo, railMat);
+        
+        const railCenter = new THREE.Vector3()
+            .lerpVectors(start, end, 0.5)
+            .add(sideOffset);
+        
+        topRail.position.set(railCenter.x, railCenter.y + railingHeight, railCenter.z);
+        topRail.rotation.y = angle;
+        topRail.rotation.z = Math.PI / 2;
+        topRail.castShadow = true;
+        topRail.receiveShadow = true;
+        scene.add(topRail);
+        
+        // 中间横杆
+        const midRailGeo = new THREE.CylinderGeometry(0.03, 0.03, length, 6);
+        const midRail = new THREE.Mesh(midRailGeo, railMat);
+        midRail.position.set(railCenter.x, railCenter.y + railingHeight / 2, railCenter.z);
+        midRail.rotation.y = angle;
+        midRail.rotation.z = Math.PI / 2;
+        midRail.castShadow = true;
+        midRail.receiveShadow = true;
+        scene.add(midRail);
+    }
+}
+
+// 启动
+init(); 

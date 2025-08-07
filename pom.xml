@@ -20,5 +20,7 @@
         <module>springboot-security</module>
         <module>springboot-security-oauth</module>
         <module>springboot-shiro</module>
+        <module>springboot-seafile</module>
+        <module>springboot-asyncTool</module>
     </modules>
 </project>
