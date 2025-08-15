@@ -22,5 +22,6 @@
         <module>springboot-shiro</module>
         <module>springboot-seafile</module>
         <module>springboot-asyncTool</module>
+        <module>springboot-psytest</module>
     </modules>
 </project>
