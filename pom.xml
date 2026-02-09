@@ -9,19 +9,20 @@
     <packaging>pom</packaging>
     <version>1.0-SNAPSHOT</version>
     <modules>
-        <module>springboot</module>
-        <module>springboot-swagger</module>
+<!--        <module>springboot</module>-->
+<!--        <module>springboot-swagger</module>-->
         <module>springboot-knife</module>
-        <module>springboot-jdbc-mysql</module>
-        <module>springboot-ldaptive</module>
-        <module>springboot-tabula</module>
-        <module>springboot-poi-tl</module>
-        <module>springboot-rabbitmq</module>
-        <module>springboot-security</module>
-        <module>springboot-security-oauth</module>
-        <module>springboot-shiro</module>
-        <module>springboot-seafile</module>
-        <module>springboot-asyncTool</module>
-        <module>springboot-psytest</module>
+<!--        <module>springboot-validate</module>-->
+        <!--        <module>springboot-jdbc-mysql</module>-->
+<!--        <module>springboot-ldaptive</module>-->
+<!--        <module>springboot-tabula</module>-->
+<!--        <module>springboot-poi-tl</module>-->
+<!--        <module>springboot-rabbitmq</module>-->
+<!--        <module>springboot-security</module>-->
+<!--        <module>springboot-security-oauth</module>-->
+<!--        <module>springboot-shiro</module>-->
+<!--        <module>springboot-seafile</module>-->
+<!--        <module>springboot-asyncTool</module>-->
+<!--        <module>springboot-psytest</module>-->
     </modules>
 </project>
