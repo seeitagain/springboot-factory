@@ -12,7 +12,8 @@
 <!--        <module>springboot</module>-->
 <!--        <module>springboot-swagger</module>-->
         <module>springboot-knife</module>
-<!--        <module>springboot-validate</module>-->
+        <module>springboot-mybatis</module>
+        <!--        <module>springboot-validate</module>-->
         <!--        <module>springboot-jdbc-mysql</module>-->
 <!--        <module>springboot-ldaptive</module>-->
 <!--        <module>springboot-tabula</module>-->

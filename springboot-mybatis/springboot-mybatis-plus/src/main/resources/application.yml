@@ -1,0 +1,29 @@
+## 无需关心此配置
+## knife4j.enable=true
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/ruoyi-vue-pro?useSSL=false&useUnicode=true&characterEncoding=UTF-8
+    driver-class-name: com.mysql.jdbc.Driver
+    username: ruoyi
+    password: 123456
+
+# mybatis-plus 配置内容
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true # 虽然默认为 true ，但是还是显示去指定下。
+  global-config:
+    db-config:
+      id-type: auto # ID 主键自增
+      logic-delete-value: 1 # 逻辑已删除值(默认为 1)
+      logic-not-delete-value: 0 # 逻辑未删除值(默认为 0)
+  mapper-locations: classpath*:mapper/*.xml
+  type-aliases-package: io.github.seeitagain.mybatis.dataobject
+
+# dao 开启 debug 模式 mybatis 输入 sql
+logging:
+  level:
+    io:
+      github:
+        seeitagain:
+          mybatis:
+            mapper: debug
